@@ -71,7 +71,7 @@ export default function ProfileOrderDetail() {
                 render: (dataInfo: OrderData) => (
                     <>
                         {dataInfo.comment ? (
-                            <div>{dataInfo.comment}<div/>
+                            <div>{dataInfo.comment}</div>
                         ) : (
                             'Комментариев нет'
                         )}
