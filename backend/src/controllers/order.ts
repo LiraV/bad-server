@@ -35,14 +35,16 @@ export const getOrders = async (
             ? Math.min(Math.floor(Number(limit)), MAX_LIMIT)
             : 10;
         const filters: FilterQuery<Partial<IOrder>> = {}
+        const allowedStatuses = ['completed', 'pending', 'created', 'cancelled'] as const;
 
-        if (status) {
-            if (typeof status === 'object') {
-                Object.assign(filters, status)
+        if (status !== undefined) {
+            if (typeof status !== 'string') {
+                return next(new BadRequestError('Некорректный status'));
             }
-            if (typeof status === 'string') {
-                filters.status = status
+            if (!allowedStatuses.includes(status as any)) {
+                return next(new BadRequestError('Некорректный status'));
             }
+            filters.status = status;
         }
 
         if (totalAmountFrom) {
