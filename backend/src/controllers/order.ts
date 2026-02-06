@@ -302,6 +302,20 @@ export const createOrder = async (
         const { address, payment, phone, total, email, items, comment } =
             req.body
 
+        if (typeof phone !== 'string') {
+            return next(new BadRequestError('Телефон должен быть строкой'));
+        }
+
+        const normalizedPhone = phone.trim();
+
+        if (normalizedPhone.length > 20) {
+            return next(new BadRequestError('Слишком длинный телефон'));
+        }
+
+        if (!/^\+?d{10,15}$/.test(normalizedPhone)) {
+            return next(new BadRequestError('Некорректный телефон'));
+        }
+
         items.forEach((id: Types.ObjectId) => {
             const product = products.find((p) => p._id.equals(id))
             if (!product) {
