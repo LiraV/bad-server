@@ -10,152 +10,162 @@ import sanitizeHtml from 'sanitize-html'
 // eslint-disable-next-line max-len
 // GET /orders?page=2&limit=5&sort=totalAmount&order=desc&orderDateFrom=2024-07-01&orderDateTo=2024-08-01&status=delivering&totalAmountFrom=100&totalAmountTo=1000&search=%2B1
 
-export const getOrders = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-) => {
-    try {
-        const {
-            page = 1,
-            limit = 10,
-            sortField = 'createdAt',
-            sortOrder = 'desc',
-            status,
-            totalAmountFrom,
-            totalAmountTo,
-            orderDateFrom,
-            orderDateTo,
-            search,
-        } = req.query
+const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        const MAX_LIMIT = 10;
-        const safePage = Number.isFinite(Number(page)) && Number(page) > 0 ? Math.floor(Number(page)) : 1;
-        const safeLimit = Number.isFinite(Number(limit)) && Number(limit) > 0
-            ? Math.min(Math.floor(Number(limit)), MAX_LIMIT)
-            : 10;
-        const filters: FilterQuery<Partial<IOrder>> = {}
-        const allowedStatuses = ['completed', 'pending', 'created', 'cancelled'] as const;
+export const getOrders = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      sortField = 'createdAt',
+      sortOrder = 'desc',
+      status,
+      totalAmountFrom,
+      totalAmountTo,
+      orderDateFrom,
+      orderDateTo,
+      search,
+    } = req.query;
 
-        if (status !== undefined) {
-            if (typeof status !== 'string') {
-                return next(new BadRequestError('Некорректный status'));
-            }
-            if (!allowedStatuses.includes(status as any)) {
-                return next(new BadRequestError('Некорректный status'));
-            }
-            filters.status = status;
-        }
+    const MAX_LIMIT = 10;
 
-        if (totalAmountFrom) {
-            filters.totalAmount = {
-                ...filters.totalAmount,
-                $gte: Number(totalAmountFrom),
-            }
-        }
+    const safePage =
+      Number.isFinite(Number(page)) && Number(page) > 0 ? Math.floor(Number(page)) : 1;
 
-        if (totalAmountTo) {
-            filters.totalAmount = {
-                ...filters.totalAmount,
-                $lte: Number(totalAmountTo),
-            }
-        }
+    const safeLimit =
+      Number.isFinite(Number(limit)) && Number(limit) > 0
+        ? Math.min(Math.floor(Number(limit)), MAX_LIMIT)
+        : 10;
 
-        if (orderDateFrom) {
-            filters.createdAt = {
-                ...filters.createdAt,
-                $gte: new Date(orderDateFrom as string),
-            }
-        }
+    const allowedSortFields = new Set(['createdAt', 'totalAmount', 'orderNumber', 'status']);
+    const safeSortField =
+      typeof sortField === 'string' && allowedSortFields.has(sortField) ? sortField : 'createdAt';
 
-        if (orderDateTo) {
-            filters.createdAt = {
-                ...filters.createdAt,
-                $lte: new Date(orderDateTo as string),
-            }
-        }
+    const safeSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
 
-        const aggregatePipeline: any[] = [
-            { $match: filters },
-            {
-                $lookup: {
-                    from: 'products',
-                    localField: 'products',
-                    foreignField: '_id',
-                    as: 'products',
-                },
-            },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'customer',
-                    foreignField: '_id',
-                    as: 'customer',
-                },
-            },
-            { $unwind: '$customer' },
-            { $unwind: '$products' },
-        ]
-
-        if (search) {
-            const searchRegex = new RegExp(search as string, 'i')
-            const searchNumber = Number(search)
-
-            const searchConditions: any[] = [{ 'products.title': searchRegex }]
-
-            if (!Number.isNaN(searchNumber)) {
-                searchConditions.push({ orderNumber: searchNumber })
-            }
-
-            aggregatePipeline.push({
-                $match: {
-                    $or: searchConditions,
-                },
-            })
-
-            filters.$or = searchConditions
-        }
-
-        const sort: { [key: string]: any } = {}
-
-        if (sortField && sortOrder) {
-            sort[sortField as string] = sortOrder === 'desc' ? -1 : 1
-        }
-
-        aggregatePipeline.push(
-            { $sort: sort },
-            { $skip: (Number(safePage) - 1) * Number(safeLimit) },
-            { $limit: Number(safeLimit) },
-            {
-                $group: {
-                    _id: '$_id',
-                    orderNumber: { $first: '$orderNumber' },
-                    status: { $first: '$status' },
-                    totalAmount: { $first: '$totalAmount' },
-                    products: { $push: '$products' },
-                    customer: { $first: '$customer' },
-                    createdAt: { $first: '$createdAt' },
-                },
-            }
-        )
-
-        const orders = await Order.aggregate(aggregatePipeline)
-        const totalOrders = await Order.countDocuments(filters)
-        const totalPages = Math.ceil(totalOrders / Number(safeLimit))
-
-        res.status(200).json({
-            orders,
-            pagination: {
-                totalOrders,
-                totalPages,
-                currentPage: Number(safePage),
-                pageSize: Number(safeLimit),
-            },
-        })
-    } catch (error) {
-        next(error)
+    let safeSearch: string | null = null;
+    if (search !== undefined) {
+      if (typeof search !== 'string') return next(new BadRequestError('Некорректный search'));
+      safeSearch = search.trim();
+      if (safeSearch.length > 50) return next(new BadRequestError('Слишком длинный search'));
     }
-}
+
+    const filters: FilterQuery<Partial<IOrder>> = {};
+    const allowedStatuses = ['completed', 'pending', 'created', 'cancelled'] as const;
+
+    if (status !== undefined) {
+      if (typeof status !== 'string') return next(new BadRequestError('Некорректный status'));
+      if (!allowedStatuses.includes(status as any)) {
+        return next(new BadRequestError('Некорректный status'));
+      }
+      filters.status = status;
+    }
+
+    if (totalAmountFrom !== undefined) {
+      const n = Number(totalAmountFrom);
+      if (!Number.isFinite(n)) return next(new BadRequestError('Некорректный totalAmountFrom'));
+      filters.totalAmount = { ...filters.totalAmount, $gte: n };
+    }
+
+    if (totalAmountTo !== undefined) {
+      const n = Number(totalAmountTo);
+      if (!Number.isFinite(n)) return next(new BadRequestError('Некорректный totalAmountTo'));
+      filters.totalAmount = { ...filters.totalAmount, $lte: n };
+    }
+
+    if (orderDateFrom !== undefined) {
+      if (typeof orderDateFrom !== 'string') return next(new BadRequestError('Некорректный orderDateFrom'));
+      const d = new Date(orderDateFrom);
+      if (Number.isNaN(d.getTime())) return next(new BadRequestError('Некорректный orderDateFrom'));
+      filters.createdAt = { ...filters.createdAt, $gte: d };
+    }
+
+    if (orderDateTo !== undefined) {
+      if (typeof orderDateTo !== 'string') return next(new BadRequestError('Некорректный orderDateTo'));
+      const d = new Date(orderDateTo);
+      if (Number.isNaN(d.getTime())) return next(new BadRequestError('Некорректный orderDateTo'));
+      filters.createdAt = { ...filters.createdAt, $lte: d };
+    }
+
+    const sort: Record<string, 1 | -1> = {};
+    sort[safeSortField] = safeSortOrder === 'desc' ? -1 : 1;
+
+    // База pipeline (без пагинации/сорта/группировки — чтобы легко собрать count)
+    const basePipeline: any[] = [
+      { $match: filters },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'products',
+          foreignField: '_id',
+          as: 'products',
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'customer',
+          foreignField: '_id',
+          as: 'customer',
+        },
+      },
+      { $unwind: '$customer' },
+      { $unwind: '$products' },
+    ];
+
+    if (safeSearch) {
+      const escaped = escapeRegex(safeSearch);
+      const searchRegex = new RegExp(escaped, 'i');
+      const searchNumber = Number(safeSearch);
+
+      const searchConditions: any[] = [{ 'products.title': searchRegex }];
+      if (!Number.isNaN(searchNumber)) {
+        searchConditions.push({ orderNumber: searchNumber });
+      }
+
+      basePipeline.push({ $match: { $or: searchConditions } });
+    }
+
+    const dataPipeline = basePipeline.concat([
+      { $sort: sort },
+      { $skip: (safePage - 1) * safeLimit },
+      { $limit: safeLimit },
+      {
+        $group: {
+          _id: '$_id',
+          orderNumber: { $first: '$orderNumber' },
+          status: { $first: '$status' },
+          totalAmount: { $first: '$totalAmount' },
+          products: { $push: '$products' },
+          customer: { $first: '$customer' },
+          createdAt: { $first: '$createdAt' },
+        },
+      },
+    ]);
+
+    const countPipeline = basePipeline.concat([{ $group: { _id: '$_id' } }, { $count: 'total' }]);
+
+    const [orders, totalAgg] = await Promise.all([
+      Order.aggregate(dataPipeline),
+      Order.aggregate(countPipeline),
+    ]);
+
+    const totalOrders = totalAgg?.[0]?.total ?? 0;
+    const totalPages = Math.ceil(totalOrders / safeLimit);
+
+    return res.status(200).json({
+      orders,
+      pagination: {
+        totalOrders,
+        totalPages,
+        currentPage: safePage,
+        pageSize: safeLimit,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
 
 export const getOrdersCurrentUser = async (
     req: Request,
