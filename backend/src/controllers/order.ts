@@ -290,73 +290,64 @@ export const getOrderCurrentUserByNumber = async (
 }
 
 // POST /product
-export const createOrder = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-) => {
-    try {
-        const basket: IProduct[] = []
-        const products = await Product.find<IProduct>({})
-        const userId = res.locals.user._id
-        const { address, payment, phone, total, email, items, comment } =
-            req.body
+export const createOrder = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = res.locals.user._id;
+    const { address, payment, phone, total, email, items, comment } = req.body;
 
-        if (typeof phone !== 'string') {
-            return next(new BadRequestError('Телефон должен быть строкой'));
-        }
-
-        const normalizedPhone = phone.trim();
-
-        if (normalizedPhone.length > 20) {
-            return next(new BadRequestError('Слишком длинный телефон'));
-        }
-
-        if (!/^\+?d{10,15}$/.test(normalizedPhone)) {
-            return next(new BadRequestError('Некорректный телефон'));
-        }
-
-        items.forEach((id: Types.ObjectId) => {
-            const product = products.find((p) => p._id.equals(id))
-            if (!product) {
-                throw new BadRequestError(`Товар с id ${id} не найден`)
-            }
-            if (product.price === null) {
-                throw new BadRequestError(`Товар с id ${id} не продается`)
-            }
-            return basket.push(product)
-        })
-        const totalBasket = basket.reduce((a, c) => a + c.price, 0)
-        if (totalBasket !== total) {
-            return next(new BadRequestError('Неверная сумма заказа'))
-        }
-
-        const safeComment = sanitizeHtml(comment || '', {
-            allowedTags: [],
-            allowedAttributes: {},
-        })
-
-        const newOrder = new Order({
-            totalAmount: total,
-            products: items,
-            payment,
-            phone,
-            email,
-            comment: safeComment,
-            customer: userId,
-            deliveryAddress: address,
-        })
-        const populateOrder = await newOrder.populate(['customer', 'products'])
-        await populateOrder.save()
-
-        return res.status(200).json(populateOrder)
-    } catch (error) {
-        if (error instanceof MongooseError.ValidationError) {
-            return next(new BadRequestError(error.message))
-        }
-        return next(error)
+    if (typeof phone !== 'string') {
+      return next(new BadRequestError('Телефон должен быть строкой'));
     }
-}
+
+    const normalizedPhone = phone.trim();
+
+    if (normalizedPhone.length > 20) {
+      return next(new BadRequestError('Слишком длинный телефон'));
+    }
+
+    if (!/^\+?\d{10,15}$/.test(normalizedPhone)) {
+      return next(new BadRequestError('Некорректный телефон'));
+    }
+
+    const basket: IProduct[] = [];
+    const products = await Product.find<IProduct>({});
+
+    items.forEach((id: Types.ObjectId) => {
+      const product = products.find((p) => p._id.equals(id));
+      if (!product) throw new BadRequestError(`Товар с id ${id} не найден`);
+      if (product.price === null) throw new BadRequestError(`Товар с id ${id} не продается`);
+      basket.push(product);
+    });
+
+    const totalBasket = basket.reduce((a, c) => a + c.price, 0);
+    if (totalBasket !== total) {
+      return next(new BadRequestError('Неверная сумма заказа'));
+    }
+
+    const safeComment = sanitizeHtml(comment || '', { allowedTags: [], allowedAttributes: {} });
+
+    const newOrder = new Order({
+      totalAmount: total,
+      products: items,
+      payment,
+      phone: normalizedPhone,
+      email,
+      comment: safeComment,
+      customer: userId,
+      deliveryAddress: address,
+    });
+
+    const populateOrder = await newOrder.populate(['customer', 'products']);
+    await populateOrder.save();
+
+    return res.status(200).json(populateOrder);
+  } catch (error) {
+    if (error instanceof MongooseError.ValidationError) {
+      return next(new BadRequestError(error.message));
+    }
+    return next(error);
+  }
+};
 
 // Update an order
 export const updateOrder = async (
