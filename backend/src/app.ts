@@ -10,6 +10,7 @@ import errorHandler from './middlewares/error-handler'
 import serveStatic from './middlewares/serverStatic'
 import routes from './routes'
 import mongoSanitize from 'express-mongo-sanitize';
+import { apiLimiter } from './middlewares/rateLimit';
 
 const { PORT = 3000 } = process.env
 const app = express()
@@ -27,6 +28,9 @@ app.use(json())
 app.use(mongoSanitize({
   replaceWith: '_',
 }));
+
+app.set('trust proxy', 1);
+app.use(apiLimiter);
 
 app.options('*', cors({ origin: ORIGIN_ALLOW, credentials: true }))
 app.use(routes)
