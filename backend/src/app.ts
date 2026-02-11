@@ -13,7 +13,8 @@ import mongoSanitize from 'express-mongo-sanitize';
 
 const { PORT = 3000 } = process.env
 const app = express()
-
+app.use(express.json({ limit: '20kb' }));
+app.use(express.urlencoded({ extended: true, limit: '20kb' }));
 app.use(cookieParser())
 
 app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }));

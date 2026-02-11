@@ -303,7 +303,16 @@ export const getOrderCurrentUserByNumber = async (
 export const createOrder = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = res.locals.user._id;
+    const MAX_ITEMS = 50;
     const { address, payment, phone, total, email, items, comment } = req.body;
+
+    if (!Array.isArray(items)) {
+  return next(new BadRequestError('items должен быть массивом'));
+}
+
+if (items.length === 0 || items.length > MAX_ITEMS) {
+  return next(new BadRequestError(`Некорректное количество товаров (1-${MAX_ITEMS})`));
+}
 
     if (typeof phone !== 'string') {
       return next(new BadRequestError('Телефон должен быть строкой'));
@@ -320,7 +329,8 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
     }
 
     const basket: IProduct[] = [];
-    const products = await Product.find<IProduct>({});
+    const products = await Product.find({ _id: { $in: items } });
+    if (products.length !== items.length) throw new BadRequestError('Товар не найден');
 
     items.forEach((id: Types.ObjectId) => {
       const product = products.find((p) => p._id.equals(id));
