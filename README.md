@@ -13,3 +13,6 @@ docker compose up -d
 6. Админка находится по адресу http://localhost/admin/
 
 Ссылка на репозиторий: https://github.com/LiraV?tab=repositories
+Имя: Харитонова Валерия
+Когорта: 37
+Курс: Фуллстэк-разработчик расширенный
