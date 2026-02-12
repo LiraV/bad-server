@@ -23,7 +23,7 @@ export const validateOrderBody = celebrate({
             )
             .length(24)
             .min(1)
-            .max(50) 
+            .max(50)
             .required()
             .messages({
                 'array.empty': 'Не указаны товары',

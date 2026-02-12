@@ -5,32 +5,34 @@ import 'dotenv/config'
 import express, { json, urlencoded } from 'express'
 import mongoose from 'mongoose'
 import path from 'path'
+import mongoSanitize from 'express-mongo-sanitize'
 import { DB_ADDRESS, ORIGIN_ALLOW } from './config'
 import errorHandler from './middlewares/error-handler'
 import serveStatic from './middlewares/serverStatic'
 import routes from './routes'
-import mongoSanitize from 'express-mongo-sanitize';
-import { apiLimiter } from './middlewares/rateLimit';
+import { apiLimiter } from './middlewares/rateLimit'
 
 const { PORT = 3000 } = process.env
 const app = express()
-app.use(express.json({ limit: '20kb' }));
-app.use(express.urlencoded({ extended: true, limit: '20kb' }));
+app.use(express.json({ limit: '20kb' }))
+app.use(express.urlencoded({ extended: true, limit: '20kb' }))
 app.use(cookieParser())
 
-app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }));
+app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }))
 // app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(serveStatic(path.join(__dirname, 'public')))
 
 app.use(urlencoded({ extended: true }))
 app.use(json())
-app.use(mongoSanitize({
-  replaceWith: '_',
-}));
+app.use(
+    mongoSanitize({
+        replaceWith: '_',
+    })
+)
 
-app.set('trust proxy', 1);
-app.use(apiLimiter);
+app.set('trust proxy', 1)
+app.use(apiLimiter)
 
 app.options('*', cors({ origin: ORIGIN_ALLOW, credentials: true }))
 app.use(routes)
