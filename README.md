@@ -12,7 +12,7 @@ docker compose up -d
 5. На странице http://localhost/login/ можно авторизоваться.
 6. Админка находится по адресу http://localhost/admin/
 
-Ссылка на репозиторий: https://github.com/LiraV?tab=repositories
+Ссылка на репозиторий: https://github.com/LiraV/bad-server
 Имя: Харитонова Валерия
 Когорта: 37
 Курс: Фуллстэк-разработчик расширенный
